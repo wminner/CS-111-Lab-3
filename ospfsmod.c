@@ -582,6 +582,32 @@ static uint32_t
 allocate_block(void)
 {
 	/* EXERCISE: Your code here */
+	uint32_t free_block;
+	void *free_bitmap;
+	//ospfs_super_t superblock;
+	uint32_t n_blocks;	// Total num of blocks in file system
+	int i;				// Iterates through free_bitmap
+
+	// Find total blocks in file system
+	// superblock = ospfs_block(1);
+	n_blocks = ospfs_super->os_nblocks;
+
+	// Get pointer to free-block bitmap
+	free_bitmap = ospfs_block(OSPFS_FREEMAP_BLK);
+
+	// Look for a free block
+	for ( i = 0; i < n_blocks; i++ ) {
+		// If we found a free block to use
+		if ( bitvector_test(free_bitmap, i) ) {
+			eprintk("Allocating block %d.\n", i);
+			// Set bit to allocated (0)
+			free_block = i;
+			bitvector_clear(free_bitmap, i);
+			return free_block;
+		}
+	}
+
+	// Couldn't find free block, disc full
 	return 0;
 }
 
@@ -601,6 +627,22 @@ static void
 free_block(uint32_t blockno)
 {
 	/* EXERCISE: Your code here */
+	void *free_bitmap;
+	uint32_t n_blocks;	// Total num of blocks in file system
+
+	// Find total blocks in file system
+	n_blocks = ospfs_super->os_nblocks;
+
+	// Get pointer to free-block bitmap
+	free_bitmap = ospfs_block(OSPFS_FREEMAP_BLK);
+
+	// Check blockno is valid
+	if ( blockno >= 0 && blockno < n_blocks) {	
+		eprint("Freeing block %u.\n", blockno);
+		// Set bit to free (1)
+		bitvector_set(free_bitmap, blockno);
+	} else
+		eprint("Invalid block number to be freed. Ignoring request...\n");
 }
 
 
