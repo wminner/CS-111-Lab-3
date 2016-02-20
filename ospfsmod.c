@@ -445,15 +445,18 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 
 	// actual entries
 	while (r == 0 && ok_so_far >= 0 && f_pos >= 2) {
-		ospfs_direntry_t *od;
-		ospfs_inode_t *entry_oi;
+		ospfs_direntry_t *od;		// Entry in directory being processed
+		ospfs_inode_t *entry_oi;	// Entry's inode
 
 		/* If at the end of the directory, set 'r' to 1 and exit
-		 * the loop.  For now we do this all the time.
+		 * the loop.
 		 *
-		 * EXERCISE: Your code here */
-		r = 1;		/* Fix me! */
-		break;		/* Fix me! */
+		 * EXERCISE (DONE): Your code here */
+
+		if ( (f_pos-2) >= dir_oi->oi_size ) {
+			r = 1;
+			break;
+		}
 
 		/* Get a pointer to the next entry (od) in the directory.
 		 * The file system interprets the contents of a
@@ -475,7 +478,33 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		 * advance to the next directory entry.
 		 */
 
-		/* EXERCISE: Your code here */
+		/* EXERCISE (DONE): Your code here */
+
+		// Get next directory entry
+		od = ospfs_inode_data( dir_oi, f_pos-2 );
+		// If entry is not an empty dir (inode != 0)
+		if ( od->od_ino ) {
+			// Get entry's inode
+			entry_oi = ospfs_inode( od->od_ino );
+			// Process entry depending on file type
+			if ( entry_oi->oi_ftype == OSPFS_FTYPE_REG ) {	// Regular file
+				ok_so_far = filldir( dirent, od->od_name, strlen(od->od_name), f_pos, od->od_ino, DT_REG );
+			} else if ( entry_oi->oi_ftype == OSPFS_FTYPE_DIR ) {	// Directory
+				ok_so_far = filldir( dirent, od->od_name, strlen(od->od_name), f_pos, od->od_ino, DT_DIR );
+			} else if ( entry_oi->oi_ftype == OSPFS_FTYPE_SYMLINK ) {	// Symlink
+				ok_so_far = filldir( dirent, od->od_name, strlen(od->od_name), f_pos, od->od_ino, DT_LNK );
+			}
+			if ( ok_so_far >= 0 )
+				// Go to the next directory entry
+				f_pos += OSPFS_DIRENTRY_SIZE;
+			else {
+				// filldir returned negative, so done
+				r = 0;
+				break;
+			}
+		} else
+			// If skipped empty directory, go to next directory entry
+			f_pos += OSPFS_DIRENTRY_SIZE;
 	}
 
 	// Save the file position and return!

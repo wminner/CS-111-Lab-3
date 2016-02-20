@@ -27,11 +27,11 @@ Email: wesleyminner@gmail.com
 
 
 Tasks Completed:
-* ospfs_read (untested)
+* ospfs_read
+* ospfs_dir_readdir
 
 
 TODO:
-* ospfs_dir_readdir
 * allocate_block, free_block
 * change_size
 * ospfs_write
