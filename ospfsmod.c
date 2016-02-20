@@ -833,7 +833,7 @@ ospfs_notify_change(struct dentry *dentry, struct iattr *attr)
 //   as 'f_pos'; read data starting at that position, and update the position
 //   when you're done.
 //
-//   EXERCISE: Complete this function.
+//   EXERCISE (DONE): Complete this function.
 
 static ssize_t
 ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
@@ -844,13 +844,18 @@ ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
 
 	// Make sure we don't read past the end of the file!
 	// Change 'count' so we never read past the end of the file.
-	/* EXERCISE: Your code here */
+	/* EXERCISE (DONE): Your code here */
+
+	// Don't read number of bytes requested if there aren't enough bytes from offset
+	if (count > oi->oi_size - *f_pos)
+		count = oi->oi_size - *f_pos;
 
 	// Copy the data to user block by block
 	while (amount < count && retval >= 0) {
 		uint32_t blockno = ospfs_inode_blockno(oi, *f_pos);
 		uint32_t n;
 		char *data;
+		uint32_t off;
 
 		// ospfs_inode_blockno returns 0 on error
 		if (blockno == 0) {
@@ -864,9 +869,19 @@ ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
 		// Copy data into user space. Return -EFAULT if unable to write
 		// into user space.
 		// Use variable 'n' to track number of bytes moved.
-		/* EXERCISE: Your code here */
-		retval = -EIO; // Replace these lines
-		goto done;
+		/* EXERCISE (DONE): Your code here */
+		
+		off = *f_pos % OSPFS_BLKSIZE;	// Find offset into the specific block
+		n = OSPFS_BLKSIZE - off;		// Set n to max possible bytes (left in block)
+		if (n > count - amount)			// If n over count (requested num of bytes)...
+			n = count - amount;			// Limit n to just count minus whatever you already copied
+
+		// Copy from data block to user buffer, n bytes
+		retval = copy_to_user(buffer, &(data[off]), n);
+		if (retval) {			// If non-zero, then we didn't get all the bytes
+			retval = -EFAULT;	// Return with segfault
+			goto done;
+		}
 
 		buffer += n;
 		amount += n;

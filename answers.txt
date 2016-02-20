@@ -11,16 +11,40 @@
 # information you'd like us to know, please add it at the end of the file.
 
 # Partner 1
-Name: 
-Student ID: 
-Email: 
+Name: Christie Mathews
+Student ID: 104404412
+Email: mathews.christie@gmail.com
 
 # Partner 2 (if you're working in a team)
-Name: 
-Student ID: 
-Email: 
+Name: Wesley Minner
+Student ID: 703549234
+Email: wesleyminner@gmail.com
 
 # Extra credit problems
 #Extra credit problem: none
 
 # Add any other information you'd like us to know below this line.
+
+
+Tasks Completed:
+* ospfs_read (untested)
+
+
+TODO:
+* ospfs_dir_readdir
+* allocate_block, free_block
+* change_size
+* ospfs_write
+* ospfs_create
+* ospfs_link
+* ospfs_symlink, ospfs_unlink
+* conditional symlinks
+* Add hard and soft link test cases to tester script
+
+
+Notes:
+* 
+
+
+Known Issues:
+* 
