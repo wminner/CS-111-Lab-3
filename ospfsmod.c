@@ -558,7 +558,7 @@ ospfs_unlink(struct inode *dirino, struct dentry *dentry)
 /*****************************************************************************
  * FREE-BLOCK BITMAP OPERATIONS
  *
- * EXERCISE: Implement these functions.
+ * EXERCISE (DONE, TODO test and verify): Implement these functions.
  */
 
 // allocate_block()
@@ -581,7 +581,7 @@ ospfs_unlink(struct inode *dirino, struct dentry *dentry)
 static uint32_t
 allocate_block(void)
 {
-	/* EXERCISE: Your code here */
+	/* EXERCISE (DONE): Your code here */
 	uint32_t free_block;
 	void *free_bitmap;
 	//ospfs_super_t superblock;
@@ -626,7 +626,7 @@ allocate_block(void)
 static void
 free_block(uint32_t blockno)
 {
-	/* EXERCISE: Your code here */
+	/* EXERCISE (DONE): Your code here */
 	void *free_bitmap;
 	uint32_t n_blocks;	// Total num of blocks in file system
 
@@ -673,13 +673,18 @@ free_block(uint32_t blockno)
 // Returns: 0 if block index 'b' requires using the doubly indirect
 //	       block, -1 if it does not.
 //
-// EXERCISE: Fill in this function.
+// EXERCISE (DONE untested): Fill in this function.
 
 static int32_t
 indir2_index(uint32_t b)
 {
 	// Your code here.
-	return -1;
+
+	// b won't fit in direct (10) + indirect (256)
+	if ( b >= OSPFS_NDIRECT + OSPFS_NINDIRECT )
+		return 0;
+	else
+		return -1;
 }
 
 
@@ -692,30 +697,51 @@ indir2_index(uint32_t b)
 //	    otherwise, the offset of the relevant indirect block within
 //		the doubly indirect block.
 //
-// EXERCISE: Fill in this function.
+// EXERCISE (DONE untested): Fill in this function.
 
 static int32_t
 indir_index(uint32_t b)
 {
 	// Your code here.
-	return -1;
+
+	// b won't fit in direct (10)
+	if ( b >= OSPFS_NDIRECT ) {
+		// b fits in direct (10) + indirect (256)
+		if ( b < OSPFS_NDIRECT + OSPFS_NINDIRECT )
+			return 0;
+		// b won't fit in direct (10) + indirect (256)
+		else
+			// Return index of doubly indirect location
+			return (b - OSPFS_NDIRECT - OSPFS_NINDIRECT)/OSPFS_NINDIRECT;
+	// b in direct blocks
+	} else
+		return -1;
 }
 
 
-// int32_t indir_index(uint32_t b)
-//	Returns the indirect block index for file block b.
+// int32_t direct_index(uint32_t b)
+//	Returns the direct block index for file block b.
 //
 // Inputs:  b -- the zero-based index of the file block
 // Returns: the index of block b in the relevant indirect block or the direct
 //	    block array.
 //
-// EXERCISE: Fill in this function.
+// EXERCISE (DONE untested): Fill in this function.
 
 static int32_t
 direct_index(uint32_t b)
 {
 	// Your code here.
-	return -1;
+
+	// b fits somwhere in direct (10)
+	if ( b < OSPFS_NDIRECT )
+		return b;
+	// b fits somewhere in indirect (10 + 256)
+	else if ( b < OSPFS_NDIRECT + OSPFS_NINDIRECT )
+		return b - OSPFS_NDIRECT;
+	// b fits somewhere in doubly indirect (> 10 + 256)
+	else
+		return (b - OSPFS_NDIRECT - OSPFS_NINDIRECT) % OSPFS_NINDIRECT;
 }
 
 
