@@ -777,7 +777,7 @@ zero_block(uint32_t blockno)
 //          then oi->oi_size should remain unchanged. Any newly
 //          allocated blocks should be erased (set to zero).
 //
-// EXERCISE: Finish off this function.
+// EXERCISE (DONE untested): Finish off this function.
 //
 // Remember that allocating a new data block may require allocating
 // as many as three disk blocks, depending on whether a new indirect
@@ -934,7 +934,7 @@ add_block(ospfs_inode_t *oi)
 //          instance if an indirect block that should be there isn't),
 //          then oi->oi_size should remain unchanged.
 //
-// EXERCISE: Finish off this function.
+// EXERCISE (DONE untested): Finish off this function.
 //
 // Remember that you must free any indirect and doubly-indirect blocks
 // that are no longer necessary after shrinking the file.  Removing a
@@ -1056,7 +1056,7 @@ remove_block(ospfs_inode_t *oi)
 //         (The value that the final add_block or remove_block set it to
 //          is probably not correct).
 //
-//   EXERCISE: Finish off this function.
+//   EXERCISE (DONE untested): Finish off this function.
 
 static int
 change_size(ospfs_inode_t *oi, uint32_t new_size)
@@ -1064,18 +1064,40 @@ change_size(ospfs_inode_t *oi, uint32_t new_size)
 	uint32_t old_size = oi->oi_size;
 	int r = 0;
 
+	// Grow file
 	while (ospfs_size2nblocks(oi->oi_size) < ospfs_size2nblocks(new_size)) {
-	        /* EXERCISE: Your code here */
-		return -EIO; // Replace this line
+	    /* EXERCISE: Your code here */
+		r = add_block(oi);
+		if ( r < 0 )
+			break;
 	}
+
+	// Shrink file
 	while (ospfs_size2nblocks(oi->oi_size) > ospfs_size2nblocks(new_size)) {
-	        /* EXERCISE: Your code here */
-		return -EIO; // Replace this line
+	    /* EXERCISE: Your code here */
+		r = remove_block(oi);
+		if ( r < 0 )
+			break;
 	}
 
 	/* EXERCISE: Make sure you update necessary file meta data
 	             and return the proper value. */
-	return -EIO; // Replace this line
+
+	// Got an error, revert file to old size
+	if ( r < 0 ) {
+		// Try to shrink back to old size
+		while ( ospfs_size2nblocks(new_size) > ospfs_size2nblocks(old_size) ) {
+			if ( remove_block(oi) == -EIO )
+				return -EIO;
+		}
+		// Try to grow back to old size
+		while ( ospfs_size2nblocks(new_size) < ospfs_size2nblocks(old_size) ) {
+			if ( add_block(oi) == -EIO )
+				return -EIO;
+		}
+	}
+
+	return r;
 }
 
 
