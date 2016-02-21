@@ -47,4 +47,8 @@ Notes:
 
 
 Known Issues:
-* 
+* oi_size seems to be a very large number on initialization (copying) of test
+  files.  Need to test with creating new files, when the create function is
+  implemented.
+* Files need to be tested in append mode when oi_size is getting set correctly
+* add_block, remove_block: Need to deallocate correctly for times when -EIO
