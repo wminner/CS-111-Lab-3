@@ -801,7 +801,12 @@ add_block(ospfs_inode_t *oi)
 	// keep track of allocations to free in case of -ENOSPC
 	uint32_t *allocated[2] = { 0, 0 };
 
-	uint32_t new_block[3];		// Used to find free blocks and keep track in case we need to deallocate
+	// Used to find free blocks and keep track in case we need to deallocate
+	// index 0: direct
+	// index 1: indirect
+	// index 2: doubly indirect
+	uint32_t new_block[3];
+
 	uint32_t *indir_block_data;	// Holds indirect block data
 	uint32_t *indir2_block_data;// Holds doubly indirect block data
 
@@ -826,11 +831,13 @@ add_block(ospfs_inode_t *oi)
 
 	// n less than direct max (10)
 	if ( n < OSPFS_NDIRECT ) {
+		if (!oi->oi_direct)
+			return -EIO;
 		oi->oi_direct[direct_index(n)] = new_block[0];
 	}
 	// n between direct max (10) and indirect max (266)
 	else if ( n >= OSPFS_NDIRECT && n < OSPFS_NDIRECT + OSPFS_NINDIRECT ) {
-		// Allocate additional indirect blocks because
+		// Allocate additional indirect block because
 		//   direct index of 0 means we just entered a new indirect block
 		if ( direct_index(n) == 0 ) {
 			new_block[1] = allocate_block();
@@ -850,6 +857,8 @@ add_block(ospfs_inode_t *oi)
 		// Allocate direct block
 		// Get pointer to indirect block data
 		indir_block_data = (uint32_t*) ospfs_block(oi->oi_indirect);
+		if (!indir_block_data)
+			return -EIO;
 		// Save direct block num inside indirect block data
 		indir_block_data[direct_index(n)] = new_block[0];
 		oi->oi_size += OSPFS_BLKSIZE;
@@ -895,10 +904,14 @@ add_block(ospfs_inode_t *oi)
 		// Allocate direct block
 		// Get pointer to doubly indirect block data
 		indir2_block_data = (uint32_t*) ospfs_block(oi->oi_indirect2);
+		if (!indir2_block_data)
+			return -EIO;
 		// Save indirect block num inside double indirect block data
 		indir2_block_data[indir_index(n)] = new_block[1];
 		// Get pointer to indirect block data
 		indir_block_data = (uint32_t*) ospfs_block(oi->oi_indirect);
+		if (!indir_block_data)
+			return -EIO;
 		// Save direct block num inside indirect block data
 		indir_block_data[direct_index(n)] = new_block[0];
 		oi->oi_size += OSPFS_BLKSIZE;
@@ -935,9 +948,77 @@ remove_block(ospfs_inode_t *oi)
 {
 	// current number of blocks in file
 	uint32_t n = ospfs_size2nblocks(oi->oi_size);
+	uint32_t *indir_block_data;
+	uint32_t *indir2_block_data;
 
 	/* EXERCISE: Your code here */
-	return -EIO; // Replace this line
+
+	// File should not be larger than max file size
+	if ( n > OSPFS_MAXFILEBLKS )
+		return -EIO;
+
+	// n less than direct max (10)
+	if ( n < OSPFS_NDIRECT ) {
+		if (!oi->oi_direct)
+			return -EIO;
+		// Free block, set pointer to 0, reduce file size
+		free_block(oi->oi_direct[direct_index(n)]);
+		oi->oi_direct[direct_index(n)] = 0;
+		oi->oi_size -= OSPFS_BLKSIZE;
+	}
+	// n between direct max (10) and indirect max (266)
+	else if ( n >= OSPFS_NDIRECT && n < OSPFS_NDIRECT + OSPFS_NINDIRECT ) {
+		// Free direct block
+		// Get pointer to indirect block data
+		indir_block_data = (uint32_t*) ospfs_block(oi->oi_indirect);
+		if (!indir_block_data)
+			return -EIO;
+		// Free direct block inside indirect block data
+		free_block(indir_block_data[direct_index(n)]);
+		// Set direct block's pointer to 0
+		indir_block_data[direct_index(n)] = 0;
+		oi->oi_size -= OSPFS_BLKSIZE;
+
+		// Free indirect block because now empty
+		if ( direct_index(n) == 0 ) {
+			free_block(oi->oi_indirect);
+			oi->oi_indirect = 0;
+			oi->oi_size -= OSPFS_BLKSIZE;
+		}
+	}
+	// n in doubly indirect (> 266)
+	else {
+		// Free direct block
+		// Get pointer to doubly indirect block data
+		indir2_block_data = (uint32_t*) ospfs_block(oi->oi_indirect2);
+		if (!indir2_block_data)
+			return -EIO;
+		// Get pointer to indirect block data inside doubly indirect
+		indir_block_data = (uint32_t*) ospfs_block(indir2_block_data[indir_index(n)]);
+		if (!indir_block_data)
+			return -EIO;
+		// Free direct block inside indirect inside doubly indirect block data
+		free_block(indir_block_data[direct_index(n)]);
+		// Set direct block's pointer to 0
+		indir_block_data[direct_index(n)] = 0;
+		oi->oi_size -= OSPFS_BLKSIZE;
+
+		// Free indirect inside doubly indirect block because now empty
+		if ( direct_index(n) == 0 ) {
+			free_block(indir2_block_data[indir_index(n)]);
+			indir2_block_data[indir_index(n)] = 0;
+			oi->oi_size -= OSPFS_BLKSIZE;
+		}
+
+		// Free doubly indirect block because now empty
+		if (n == OSPFS_NDIRECT + OSPFS_NINDIRECT ) {
+			free_block(oi->oi_indirect2);
+			oi->oi_indirect2 = 0;
+			oi->oi_size -= OSPFS_BLKSIZE;
+		}
+	}
+
+	return 0;
 }
 
 
