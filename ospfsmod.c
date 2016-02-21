@@ -638,11 +638,11 @@ free_block(uint32_t blockno)
 
 	// Check blockno is valid
 	if ( blockno >= 0 && blockno < n_blocks) {	
-		eprint("Freeing block %u.\n", blockno);
+		eprintk("Freeing block %u.\n", blockno);
 		// Set bit to free (1)
 		bitvector_set(free_bitmap, blockno);
 	} else
-		eprint("Invalid block number to be freed. Ignoring request...\n");
+		eprintk("Invalid block number to be freed. Ignoring request...\n");
 }
 
 
@@ -745,6 +745,22 @@ direct_index(uint32_t b)
 }
 
 
+// zero_block(blockno)
+//   Sets all data in the block to zero
+
+static void
+zero_block(uint32_t blockno)
+{
+	int i;
+	char *block_data = (char*) ospfs_block(blockno);
+
+	if ( block_data ) {
+		for (i = 0; i < OSPFS_BLKSIZE; i++) {
+			block_data[i] = 0;
+		}
+	}
+}
+
 // add_block(ospfs_inode_t *oi)
 //   Adds a single data block to a file, adding indirect and
 //   doubly-indirect blocks if necessary. (Helper function for
@@ -785,8 +801,110 @@ add_block(ospfs_inode_t *oi)
 	// keep track of allocations to free in case of -ENOSPC
 	uint32_t *allocated[2] = { 0, 0 };
 
+	uint32_t new_block[3];		// Used to find free blocks and keep track in case we need to deallocate
+	uint32_t *indir_block_data;	// Holds indirect block data
+	uint32_t *indir2_block_data;// Holds doubly indirect block data
+
 	/* EXERCISE: Your code here */
-	return -EIO; // Replace this line
+
+	// Cannot grow file larger than max file size
+	if ( n == OSPFS_MAXFILEBLKS )
+		return -EIO;
+
+	// Allocate block because we need at least one block in all cases
+	new_block[0] = allocate_block();
+
+	// Check allocation was successful
+	if ( new_block[0] ) {
+		// Zero out block
+		zero_block(new_block[0]);
+		oi->oi_size += OSPFS_BLKSIZE;
+	}
+	// Not enough space on disk
+	else
+		return -ENOSPC;
+
+	// n less than direct max (10)
+	if ( n < OSPFS_NDIRECT ) {
+		oi->oi_direct[direct_index(n)] = new_block[0];
+	}
+	// n between direct max (10) and indirect max (266)
+	else if ( n >= OSPFS_NDIRECT && n < OSPFS_NDIRECT + OSPFS_NINDIRECT ) {
+		// Allocate additional indirect blocks because
+		//   direct index of 0 means we just entered a new indirect block
+		if ( direct_index(n) == 0 ) {
+			new_block[1] = allocate_block();
+			if ( new_block[1] ) {
+				zero_block(new_block[1]);
+				oi->oi_indirect = new_block[1];
+				oi->oi_size += OSPFS_BLKSIZE;
+			}
+			// Undo direct allocation because we ran out of space
+			else {
+				free_block(new_block[0]);
+				oi->oi_size -= OSPFS_BLKSIZE;
+				return -ENOSPC;
+			}
+		}
+
+		// Allocate direct block
+		// Get pointer to indirect block data
+		indir_block_data = (uint32_t*) ospfs_block(oi->oi_indirect);
+		// Save direct block num inside indirect block data
+		indir_block_data[direct_index(n)] = new_block[0];
+		oi->oi_size += OSPFS_BLKSIZE;
+	}
+	// n in doubly indirect (> 266)
+	else {
+		// Allocate additional indirect block because
+		//   direct index of 0 means we just entered a new indirect block
+		if ( direct_index(n) == 0 ) {
+			new_block[1] = allocate_block();
+			if ( new_block[1] ) {
+				zero_block(new_block[1]);
+				oi->oi_indirect = new_block[1];
+				oi->oi_size += OSPFS_BLKSIZE;
+			}
+			// Undo direct allocation because we ran out of space
+			else {
+				free_block(new_block[0]);
+				oi->oi_size -= OSPFS_BLKSIZE;
+				return -ENOSPC;
+			}
+		}
+
+		// Allocate additional doubly indirect block
+		//   because we just entered the doubly indirect block
+		if ( n == OSPFS_NDIRECT + OSPFS_NINDIRECT ) {
+			new_block[2] = allocate_block();
+			if ( new_block[2] ) {
+				zero_block(new_block[2]);
+				oi->oi_indirect2 = new_block[2];
+				oi->oi_size += OSPFS_BLKSIZE;
+			}
+			// Undo direct and indirect allocation because we ran out of space
+			else {
+				free_block(new_block[0]);
+				free_block(new_block[1]);
+				oi->oi_indirect = 0;
+				oi->oi_size -= 2*OSPFS_BLKSIZE;
+				return -ENOSPC;
+			}
+		}
+
+		// Allocate direct block
+		// Get pointer to doubly indirect block data
+		indir2_block_data = (uint32_t*) ospfs_block(oi->oi_indirect2);
+		// Save indirect block num inside double indirect block data
+		indir2_block_data[indir_index(n)] = new_block[1];
+		// Get pointer to indirect block data
+		indir_block_data = (uint32_t*) ospfs_block(oi->oi_indirect);
+		// Save direct block num inside indirect block data
+		indir_block_data[direct_index(n)] = new_block[0];
+		oi->oi_size += OSPFS_BLKSIZE;
+	}
+
+	return 0;
 }
 
 

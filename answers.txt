@@ -30,10 +30,11 @@ Tasks Completed:
 * ospfs_read
 * ospfs_dir_readdir
 * allocate_block, free_block (untested)
+* add_block (untested)
 
 
 TODO:
-* change_size
+* change_size, remove_block
 * ospfs_write
 * ospfs_create
 * ospfs_link
