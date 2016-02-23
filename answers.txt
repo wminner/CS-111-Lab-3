@@ -32,10 +32,10 @@ Tasks Completed:
 * allocate_block, free_block
 * add_block, remove_block, change_size
 * ospfs_write
+* ospfs_create
 
 
 TODO:
-* ospfs_create
 * ospfs_link
 * ospfs_symlink, ospfs_unlink
 * conditional symlinks
