@@ -29,17 +29,18 @@ Email: wesleyminner@gmail.com
 Tasks Completed:
 * ospfs_read
 * ospfs_dir_readdir
-* allocate_block, free_block (untested)
+* allocate_block, free_block
 * add_block, remove_block, change_size (untested)
+* ospfs_write
 
 
 TODO:
-* ospfs_write
 * ospfs_create
 * ospfs_link
 * ospfs_symlink, ospfs_unlink
 * conditional symlinks
 * Add hard and soft link test cases to tester script
+* Remove all the debug print statements when finished testing
 
 
 Notes:
@@ -47,8 +48,9 @@ Notes:
 
 
 Known Issues:
-* oi_size seems to be a very large number on initialization (copying) of test
-  files.  Need to test with creating new files, when the create function is
-  implemented.
-* Files need to be tested in append mode when oi_size is getting set correctly
+* oi_size seems to be a very large number sometimes, which can mess up writes.
+  Not sure why this happens, but it seems to happen most often with '>'
+  redirect commands.
 * add_block, remove_block: Need to deallocate correctly for times when -EIO
+* Need to update change_size so that it manages the oi_size variable instead of
+  the write function.

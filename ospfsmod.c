@@ -816,6 +816,9 @@ add_block(ospfs_inode_t *oi)
 	uint32_t new_block[3];
 	uint32_t *indir_block_data;	// Holds indirect block data
 	uint32_t *indir2_block_data;// Holds doubly indirect block data
+
+	// TODO: Not yet implemented. Use these variables to undo a certain amount
+	// of allocations and then return r.
 	int blocks_added = 0;
 	int r = 0;
 
@@ -1269,14 +1272,25 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 	size_t amount = 0;		// Amount of data already written
 
 	int append_flag = 0;
+	int trunc_flag = 0;
+	loff_t initial_pos = *f_pos;
+	// DEBUG
+	// eprintk("Initial oi_size = %u.\n", oi->oi_size);
+	// eprintk("initial count = %u.\n", count);
+	// eprintk("Initial *f_pos = %u.\n", *f_pos);
 
 	// Support files opened with the O_APPEND flag.  To detect O_APPEND,
 	// use struct file's f_flags field and the O_APPEND bit.
 	/* EXERCISE: Your code here */
 
 	// Check for append flag
-	if ( filp->f_flags & O_APPEND )
+	if ( filp->f_flags & O_APPEND ) {
 		append_flag = 1;
+		eprintk("Append flag set!!!!!!!!!!!!!!!!!!\n");
+	} else if ( filp->f_flags & O_TRUNC ) {
+		trunc_flag = 1;
+		eprintk("Trunc flag set!!!!!!!!!!!!!!!!!!!\n");
+	}
 
 	// If the user is writing past the end of the file, change the file's
 	// size to accomodate the request.  (Use change_size().)
@@ -1284,28 +1298,39 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 
 	// Writing past end of file via append
 	if ( append_flag ) {
-		*f_pos = oi->oi_size;
-		retval = change_size(oi, count + oi->oi_size);
-		if ( retval < 0 )
+		//eprintk("Append: count is %u, oi_size is %u, *f_pos is %u\n", count, oi->oi_size, *f_pos);	// DEBUG
+		retval = change_size(oi, initial_pos + count);
+		//eprintk("Changed size is %u.\n", oi->oi_size);	// DEBUG
+		if ( retval < 0 ) {
+			//eprintk("Fault 1 happened!!!!!!!!\n");	// DEBUG
 			goto done;
+		}
 	}
 	// Changing file size due to count being different size than current size
 	else if ( ospfs_size2nblocks(count) != ospfs_size2nblocks(oi->oi_size) ) {
-		//eprintk("count block size is %u, oi_size is %u.\n", count, oi->oi_size);
+		//eprintk("Change size: count is %u, oi_size is %u.\n", count, oi->oi_size);	// DEBUG
 		retval = change_size(oi, count);
-		if ( retval < 0 )
+		if ( retval < 0 ) {
+			//eprintk("Fault 2 happened!!!!!!!!\n");	// DEBUG
 			goto done;
+		}
 	}
 
 	// Copy data block by block
 	while (amount < count && retval >= 0) {
-		uint32_t blockno = ospfs_inode_blockno(oi, *f_pos);
-		uint32_t n;		// Number of bytes left to write
+		uint32_t blockno;
+		if ( *f_pos == oi->oi_size )
+			// Need *f_pos-1 because otherwise this always returns 0 when in append mode
+			blockno = ospfs_inode_blockno(oi, *f_pos-1);
+		else
+			blockno = ospfs_inode_blockno(oi, *f_pos);
+		uint32_t n;		// Number of bytes left to write in block
 		char *data;
 		uint32_t off;
 
 		if (blockno == 0) {
 			retval = -EIO;
+			//eprintk("Fault 3 happened!!!!!!!!\n");	// DEBUG
 			goto done;
 		}
 
@@ -1324,6 +1349,7 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 
 		// Copy from buffer to data block, n bytes
 		retval = copy_from_user(&(data[off]), buffer, n);
+		//eprintk("retval from copy: %d.\n", retval);	// DEBUG
 		if (retval) {
 			retval = -EFAULT;
 			goto done;
@@ -1333,8 +1359,20 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 		amount += n;
 		*f_pos += n;
 	}
+	//eprintk("*f_pos = %u, initial_pos = %u, count = %u.\n", *f_pos, initial_pos, count);	// DEBUG
+	//eprintk("append_flag = %d.\n", append_flag);	// DEBUG
+	if ( append_flag ) {
+		if ( (initial_pos + count) > oi->oi_size )
+			oi->oi_size = initial_pos + count;
+	} else if ( trunc_flag ) {
+		oi->oi_size = initial_pos + count;
+	} else {	// If no flag specified, assume it was truncated... TODO
+		oi->oi_size = initial_pos + count;
+		//eprintk("New size is %u.\n", initial_pos+count);	// DEBUG
+	}
 
     done:
+    //eprintk("retval = %d.\n", retval);	// DEBUG
 	return (retval >= 0 ? amount : retval);
 }
 
