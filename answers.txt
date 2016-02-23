@@ -30,7 +30,7 @@ Tasks Completed:
 * ospfs_read
 * ospfs_dir_readdir
 * allocate_block, free_block
-* add_block, remove_block, change_size (untested)
+* add_block, remove_block, change_size
 * ospfs_write
 
 
@@ -52,5 +52,3 @@ Known Issues:
   Not sure why this happens, but it seems to happen most often with '>'
   redirect commands.
 * add_block, remove_block: Need to deallocate correctly for times when -EIO
-* Need to update change_size so that it manages the oi_size variable instead of
-  the write function.
