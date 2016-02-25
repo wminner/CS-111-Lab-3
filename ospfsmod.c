@@ -590,7 +590,6 @@ allocate_block(void)
 
 	// Don't allow allocating of blocks below lowest data block
 	uint32_t lowest_data_block = ospfs_super->os_firstinob + (ospfs_super->os_ninodes / OSPFS_BLKINODES);
-	//eprintk("Lowest data block is %u.\n", lowest_data_block);		// DEBUG
 
 	// Find total blocks in file system
 	// superblock = ospfs_block(1);
@@ -603,7 +602,6 @@ allocate_block(void)
 	for (i = lowest_data_block; i < n_blocks; i++ ) {
 		// If we found a free block to use
 		if ( bitvector_test(free_bitmap, i) ) {
-			//eprintk("Allocating block %d.\n", i);		// DEBUG
 			// Set bit to allocated (0)
 			new_block = i;
 			bitvector_clear(free_bitmap, i);
@@ -636,7 +634,6 @@ free_block(uint32_t blockno)
 
 	// Don't allow freeing of blocks below lowest data block
 	uint32_t lowest_data_block = ospfs_super->os_firstinob + (ospfs_super->os_ninodes / OSPFS_BLKINODES);
-	//eprintk("Lowest data block is %u.\n", lowest_data_block);		// DEBUG
 
 	// Find total blocks in file system
 	n_blocks = ospfs_super->os_nblocks;
@@ -646,7 +643,6 @@ free_block(uint32_t blockno)
 
 	// Check blockno is valid
 	if ( blockno >= lowest_data_block && blockno < n_blocks) {
-		//eprintk("Freeing block %u.\n", blockno);		// DEBUG
 		// Set bit to free (1)
 		bitvector_set(free_bitmap, blockno);
 	} else
@@ -807,20 +803,16 @@ add_block(ospfs_inode_t *oi)
 	uint32_t n = ospfs_size2nblocks(oi->oi_size);
 
 	// keep track of allocations to free in case of -ENOSPC
-	uint32_t *allocated[2] = { 0, 0 };
+	//uint32_t *allocated[2] = { 0, 0 };	// Used new_block instead
 
 	// Used to find free blocks and keep track in case we need to deallocate
 	// index 0: direct
 	// index 1: indirect
 	// index 2: doubly indirect
-	uint32_t new_block[3];
+	uint32_t new_block[3] = { 0, 0, 0 };
 	uint32_t *indir_block_data;	// Holds indirect block data
 	uint32_t *indir2_block_data;// Holds doubly indirect block data
-
-	// TODO: Not yet implemented. Use these variables to undo a certain amount
-	// of allocations and then return r.
-	int blocks_added = 0;
-	int r = 0;
+	int blocks_added = 0;	// Keep track of how many blocks we have allocated
 
 	/* EXERCISE: Your code here */
 
@@ -833,18 +825,24 @@ add_block(ospfs_inode_t *oi)
 
 	// Check allocation was successful
 	if ( new_block[0] ) {
+		blocks_added++;
 		// Zero out block
 		zero_block(new_block[0]);
-		oi->oi_size += OSPFS_BLKSIZE;
 	}
-	// Not enough space on disk
+	// Not enough space on disk, no need to deallocate, just return
 	else
 		return -ENOSPC;
 
 	// n less than direct max (10)
 	if ( n < OSPFS_NDIRECT ) {
-		if (!oi->oi_direct)
+
+		if ( !oi->oi_direct ) {		// Can't assign block to NULL pointer
+			// Deallocate 1 block, no need to 0 block pointer since it was NULL already
+			free_block(new_block[0]);
 			return -EIO;
+		}
+
+		// Point inode to newly allocated block
 		oi->oi_direct[direct_index(n)] = new_block[0];
 	}
 	// n between direct max (>= 10) and indirect max (< 266)
@@ -854,14 +852,13 @@ add_block(ospfs_inode_t *oi)
 		if ( direct_index(n) == 0 ) {
 			new_block[1] = allocate_block();
 			if ( new_block[1] ) {
+				blocks_added++;
 				zero_block(new_block[1]);
 				oi->oi_indirect = new_block[1];
-				oi->oi_size += OSPFS_BLKSIZE;
 			}
 			// Undo direct allocation because we ran out of space
 			else {
 				free_block(new_block[0]);
-				oi->oi_size -= OSPFS_BLKSIZE;
 				return -ENOSPC;
 			}
 		}
@@ -869,46 +866,52 @@ add_block(ospfs_inode_t *oi)
 		// Allocate direct block
 		// Get pointer to indirect block data
 		indir_block_data = (uint32_t*) ospfs_block(oi->oi_indirect);
-		if (!indir_block_data)
+		if (!indir_block_data) {	// Can't assign block to NULL pointer
+			// Deallocate depending on how many blocks we already added
+			if ( blocks_added == 1 )
+				free_block(new_block[0]);
+			else if ( blocks_added == 2 ) {
+				free_block(new_block[0]);
+				free_block(new_block[1]);
+				oi->oi_indirect = 0;
+			}
 			return -EIO;
+		}
 		// Save direct block num inside indirect block data
 		indir_block_data[direct_index(n)] = new_block[0];
-		oi->oi_size += OSPFS_BLKSIZE;
 	}
 	// n in doubly indirect (>= 266)
-	else {
+	else if ( indir2_index(n) == 0 ) {
 		// Allocate additional indirect block because
 		//   direct index of 0 means we just entered a new indirect block
 		if ( direct_index(n) == 0 ) {
 			new_block[1] = allocate_block();
 			if ( new_block[1] ) {
+				blocks_added++;
 				zero_block(new_block[1]);
-				oi->oi_indirect = new_block[1];
-				oi->oi_size += OSPFS_BLKSIZE;
 			}
 			// Undo direct allocation because we ran out of space
 			else {
 				free_block(new_block[0]);
-				oi->oi_size -= OSPFS_BLKSIZE;
 				return -ENOSPC;
 			}
 		}
 
 		// Allocate additional doubly indirect block
-		//   because we just entered the doubly indirect block
+		//   because we just entered the doubly indirect block.
+		//   Allocating a doubly indirect with this condition guarentees we also
+		//   allocated a regular indirect block above.
 		if ( n == OSPFS_NDIRECT + OSPFS_NINDIRECT ) {
 			new_block[2] = allocate_block();
 			if ( new_block[2] ) {
+				blocks_added++;
 				zero_block(new_block[2]);
 				oi->oi_indirect2 = new_block[2];
-				oi->oi_size += OSPFS_BLKSIZE;
 			}
 			// Undo direct and indirect allocation because we ran out of space
 			else {
 				free_block(new_block[0]);
 				free_block(new_block[1]);
-				oi->oi_indirect = 0;
-				oi->oi_size -= 2*OSPFS_BLKSIZE;
 				return -ENOSPC;
 			}
 		}
@@ -916,41 +919,47 @@ add_block(ospfs_inode_t *oi)
 		// Allocate direct block
 		// Get pointer to doubly indirect block data
 		indir2_block_data = (uint32_t*) ospfs_block(oi->oi_indirect2);
-		if (!indir2_block_data)
+		if (!indir2_block_data) {	// Can't assign block to NULL pointer
+			// Deallocate depending on how many blocks we already added
+			if ( blocks_added == 1 )
+				free_block(new_block[0]);
+			else if ( blocks_added == 2 ) {
+				free_block(new_block[0]);
+				free_block(new_block[1]);
+			} else if ( blocks_added == 3 ) {
+				free_block(new_block[0]);
+				free_block(new_block[1]);
+				free_block(new_block[2]);
+				oi->oi_indirect2 = 0;
+			}
 			return -EIO;
+		}
 		// Save indirect block num inside double indirect block data
 		indir2_block_data[indir_index(n)] = new_block[1];
 		// Get pointer to indirect block data
-		indir_block_data = (uint32_t*) ospfs_block(oi->oi_indirect);
-		if (!indir_block_data)
+		indir_block_data = (uint32_t*) ospfs_block(new_block[1]);
+		if (!indir_block_data) {	// Can't assign block to NULL pointer
+			// Deallocate depending on how many blocks we already added
+			if ( blocks_added == 1 )
+				free_block(new_block[0]);
+			else if ( blocks_added == 2 ) {
+				free_block(new_block[0]);
+				free_block(new_block[1]);
+			} else if ( blocks_added == 3 ) {
+				free_block(new_block[0]);
+				free_block(new_block[1]);
+				free_block(new_block[2]);
+				oi->oi_indirect2 = 0;
+			}
+			indir2_block_data[indir_index(n)] = 0;
 			return -EIO;
+		}
 		// Save direct block num inside indirect block data
 		indir_block_data[direct_index(n)] = new_block[0];
-		oi->oi_size += OSPFS_BLKSIZE;
 	}
 
-	// If error, deallocate the blocks that were added
-	if ( r < 0 ) {
-		if ( blocks_added == 1 ) {
-			free_block(new_block[0]);
-			oi->oi_direct[direct_index(n)] = 0;
-			oi->oi_size -= OSPFS_BLKSIZE;
-		} else if ( blocks_added == 2 ) {
-			free_block(new_block[0]);
-			free_block(new_block[1]);
-			indir_block_data[direct_index(n)] = 0;
-			oi->oi_indirect = 0;
-			oi->oi_size -= 2*OSPFS_BLKSIZE;
-		} else if ( blocks_added == 3 ) {
-			free_block(new_block[0]);
-			free_block(new_block[1]);
-			free_block(new_block[2]);
-			indir_block_data[direct_index(n)] = 0;
-			indir2_block_data[indir_index(n)] = 0;
-			oi->oi_indirect2 = 0;
-			oi->oi_size -= 3*OSPFS_BLKSIZE;
-		}
-	}
+	// Increment file size by number of blocks added
+	oi->oi_size += (OSPFS_BLKSIZE * blocks_added);
 
 	return 0;
 }
@@ -985,6 +994,7 @@ remove_block(ospfs_inode_t *oi)
 	uint32_t n = ospfs_size2nblocks(oi->oi_size);
 	uint32_t *indir_block_data;
 	uint32_t *indir2_block_data;
+	int blocks_removed = 0;		// Keep track of how many blocks we have removed
 
 	/* EXERCISE: Your code here */
 
@@ -997,10 +1007,9 @@ remove_block(ospfs_inode_t *oi)
 		if (!oi->oi_direct)
 			return -EIO;
 		// Free block, set pointer to 0, reduce file size
-		//eprintk("n is %u, direct_index(n-1) is %u, block pointer is %u.\n", n, direct_index(n-1), oi->oi_direct[direct_index(n-1)]);
 		free_block(oi->oi_direct[direct_index(n-1)]);
 		oi->oi_direct[direct_index(n-1)] = 0;
-		oi->oi_size -= OSPFS_BLKSIZE;
+		blocks_removed++;
 	}
 	// n between direct max (10) and indirect max (266)
 	else if ( n > OSPFS_NDIRECT && n <= OSPFS_NDIRECT + OSPFS_NINDIRECT ) {
@@ -1013,13 +1022,13 @@ remove_block(ospfs_inode_t *oi)
 		free_block(indir_block_data[direct_index(n-1)]);
 		// Set direct block's pointer to 0
 		indir_block_data[direct_index(n-1)] = 0;
-		oi->oi_size -= OSPFS_BLKSIZE;
+		blocks_removed++;
 
 		// Free indirect block because now empty
 		if ( direct_index(n-1) == 0 ) {
 			free_block(oi->oi_indirect);
 			oi->oi_indirect = 0;
-			oi->oi_size -= OSPFS_BLKSIZE;
+			blocks_removed++;
 		}
 	}
 	// n in doubly indirect (> 266)
@@ -1037,22 +1046,25 @@ remove_block(ospfs_inode_t *oi)
 		free_block(indir_block_data[direct_index(n-1)]);
 		// Set direct block's pointer to 0
 		indir_block_data[direct_index(n-1)] = 0;
-		oi->oi_size -= OSPFS_BLKSIZE;
+		blocks_removed++;
 
 		// Free indirect inside doubly indirect block because now empty
 		if ( direct_index(n-1) == 0 ) {
 			free_block(indir2_block_data[indir_index(n-1)]);
 			indir2_block_data[indir_index(n-1)] = 0;
-			oi->oi_size -= OSPFS_BLKSIZE;
+			blocks_removed++;
 		}
 
-		// Free doubly indirect block because now empty
-		if (n == OSPFS_NDIRECT + OSPFS_NINDIRECT ) {
+		// Free doubly indirect block because now empty (n = 267)
+		if (n == OSPFS_NDIRECT + OSPFS_NINDIRECT + 1 ) {
 			free_block(oi->oi_indirect2);
 			oi->oi_indirect2 = 0;
-			oi->oi_size -= OSPFS_BLKSIZE;
+			blocks_removed++;
 		}
 	}
+
+	// Decrement file size by number of blocks removed
+	oi->oi_size -= (OSPFS_BLKSIZE * blocks_removed);
 
 	return 0;
 }

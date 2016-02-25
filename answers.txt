@@ -44,11 +44,8 @@ TODO:
 
 
 Notes:
-* 
+* N/A
 
 
 Known Issues:
-* oi_size seems to be a very large number sometimes, which can mess up writes.
-  Not sure why this happens, but it seems to happen most often with '>'
-  redirect commands.
-* add_block, remove_block: Need to deallocate correctly for times when -EIO
+* N/A
