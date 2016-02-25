@@ -91,6 +91,16 @@ close FOO;
       '15'
     ],
 
+    # hard link
+    [ 'echo foo >> test/foo.txt; ln test/foo.txt test/gah.txt; cat test/gah.txt; echo blurb >> test/gah.txt; cat test/foo.txt; rm test/foo.txt test/gah.txt',
+      'foo foo blurb'
+    ],
+
+    # soft link
+    [ 'ln -s hello.txt test/thelink; diff test/hello.txt test/thelink && echo Same contents; echo "World" >> test/hello.txt; diff test/hello.txt test/thelink && echo Same contents',
+      'Same contents Same contents'
+    ]
+
 );
 
 my($ntest) = 0;
