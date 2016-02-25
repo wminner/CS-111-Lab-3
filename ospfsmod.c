@@ -1480,12 +1480,41 @@ create_blank_direntry(ospfs_inode_t *dir_oi)
 //               -ENOSPC       if the disk is full & the file can't be created;
 //               -EIO          on I/O error.
 //
-//   EXERCISE: Complete this function.
+//   EXERCISE (Completed): Complete this function.
 
 static int
 ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dentry) {
-	/* EXERCISE: Your code here. */
-	return -EINVAL;
+	// Check if it's a regular file, NOT a directory
+	// ospfs_inode_t *src_inode = ospfs_inode(src_dentry->d_inode->ino);
+	// if (src_inode->oi_ftype != OSPFS_FTYPE_REG)
+	// 	return -1;
+
+	// Check Name Length
+	if ( src_dentry->d_name.len > OSPFS_MAXNAMELEN)
+		return -ENAMETOOLONG;
+
+	// Check there isn't a direntry with same name
+	if ( find_direntry(dir, src_dentry->d_name.name, src_dentry->d_name.len) )
+		return -EEXIST;
+
+	// Create a direntry
+	ospfs_direntry_t *od = create_blank_direntry(dir);
+	if (IS_ERR(od))
+		return PTR_ERR(od);
+
+	// Link to src_inode
+	od->od_ino = src_dentry->d_inode->i_ino;
+
+	// Increment link count
+	ospfs_inode(src_dentry->d_inode->i_ino)->oi_nlink++;
+
+	// Add Name to Direntry
+	memcpy(od->od_name, dst_dentry->d_name.name, dst_dentry->d_name.len);
+
+	// Add Null Byte
+	od->od_name[dst_dentry->d_name.len] = '\0';
+
+	return 0;
 }
 
 // find_empty_inode()
