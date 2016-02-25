@@ -1488,31 +1488,39 @@ ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dent
 	// ospfs_inode_t *src_inode = ospfs_inode(src_dentry->d_inode->ino);
 	// if (src_inode->oi_ftype != OSPFS_FTYPE_REG)
 	// 	return -1;
+	
+	ospfs_inode_t *dir_inode, *src_inode;
+	ospfs_direntry_t *new_direntry;
 
 	// Check Name Length
-	if ( src_dentry->d_name.len > OSPFS_MAXNAMELEN)
+	if ( dst_dentry->d_name.len > OSPFS_MAXNAMELEN)
 		return -ENAMETOOLONG;
 
 	// Check there isn't a direntry with same name
-	if ( find_direntry(dir, src_dentry->d_name.name, src_dentry->d_name.len) )
+	
+	if ( (dir_inode = ospfs_inode(dir->i_ino))== NULL )
+		return -EIO;
+	if ( find_direntry(dir_inode, dst_dentry->d_name.name, dst_dentry->d_name.len) )
 		return -EEXIST;
 
 	// Create a direntry
-	ospfs_direntry_t *od = create_blank_direntry(dir);
-	if (IS_ERR(od))
-		return PTR_ERR(od);
+	new_direntry = create_blank_direntry(dir_inode);
+	if (IS_ERR(new_direntry))
+		return PTR_ERR(new_direntry);
 
-	// Link to src_inode
-	od->od_ino = src_dentry->d_inode->i_ino;
+	// Link direntry of hardlink to inode of orignial file
+	new_direntry->od_ino = src_dentry->d_inode->i_ino;
 
-	// Increment link count
-	ospfs_inode(src_dentry->d_inode->i_ino)->oi_nlink++;
+	// Increment link count of the shared inode
+	if ( (src_inode = ospfs_inode(src_dentry->d_inode->i_ino))==NULL )
+		return -EIO;
+	src_inode->oi_nlink++;
 
 	// Add Name to Direntry
-	memcpy(od->od_name, dst_dentry->d_name.name, dst_dentry->d_name.len);
+	memcpy(new_direntry->od_name, dst_dentry->d_name.name, dst_dentry->d_name.len);
 
 	// Add Null Byte
-	od->od_name[dst_dentry->d_name.len] = '\0';
+	new_direntry->od_name[dst_dentry->d_name.len] = '\0';
 
 	return 0;
 }
@@ -1659,9 +1667,55 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 {
 	ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
 	uint32_t entry_ino = 0;
+	ospfs_direntry_t *new_direntry;
+	ospfs_symlink_inode_t *symlink_inode;
 
 	/* EXERCISE: Your code here. */
-	return -EINVAL;
+	if ( dir_oi==NULL )
+		return -EIO;
+
+	// Check Name Length
+	if ( (strlen(symname) > OSPFS_MAXSYMLINKLEN) || (dentry->d_name.len > OSPFS_MAXNAMELEN) )
+		return -ENAMETOOLONG;
+
+	// Check there isn't a direntry with same name
+	if ( find_direntry(dir_oi, dentry->d_name.name, dentry->d_name.len) )
+		return -EEXIST;
+	
+	// Find an Inode
+	entry_ino = find_empty_inode();
+	if ( entry_ino == 0 )
+		return -ENOSPC;
+
+	// Create a direntry
+	new_direntry = create_blank_direntry(dir_oi);
+	if ( IS_ERR(new_direntry) )
+		return PTR_ERR(new_direntry);
+
+	// Initialize Inode & cast to symlink_inode type
+	symlink_inode = (ospfs_symlink_inode_t*) ospfs_inode(entry_ino);
+
+	// If symlink_inode is NULL, return I/O error
+	if ( symlink_inode==NULL )
+		return -EIO;
+
+	// Initialize Inode with size of file:symlink dest, type:symlink & #-links:1
+	symlink_inode->oi_size = strlen(symname);
+	symlink_inode->oi_ftype = OSPFS_FTYPE_SYMLINK;
+	symlink_inode->oi_nlink = 1;
+	
+	// Copy destination file to oi_symlink[]
+	memcpy(symlink_inode->oi_symlink, symname, symlink_inode->oi_size);
+
+
+	// Initialize direntry symlink_inode
+	new_direntry->od_ino = entry_ino;
+
+	// Add Name to Direntry
+	memcpy(new_direntry->od_name, dentry->d_name.name, dentry->d_name.len);
+
+	// Add Null Byte to Direntry Name
+	new_direntry->od_name[dentry->d_name.len] = '\0';
 
 	/* Execute this code after your function has successfully created the
 	   file.  Set entry_ino to the created file's inode number before
