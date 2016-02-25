@@ -97,7 +97,7 @@ close FOO;
     ],
 
     # soft link
-    [ 'ln -s hello.txt test/thelink; diff test/hello.txt test/thelink && echo Same contents; echo "World" >> test/hello.txt; diff test/hello.txt test/thelink && echo Same contents',
+    [ "ln -s hello.txt test/thelink; diff test/hello.txt test/thelink && echo Same contents; echo 'World' >> test/hello.txt; diff test/hello.txt test/thelink && echo Same contents; echo 'Hello, world!' > test/hello.txt; rm test/thelink",
       'Same contents Same contents'
     ]
 
