@@ -527,29 +527,40 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 
 static int
 ospfs_unlink(struct inode *dirino, struct dentry *dentry)
-{
+{	
+	// Inode of the file to delete
 	ospfs_inode_t *oi = ospfs_inode(dentry->d_inode->i_ino);
+	// Inode of the directory the file is in
 	ospfs_inode_t *dir_oi = ospfs_inode(dentry->d_parent->d_inode->i_ino);
 	int entry_off;
+	// Direntry
 	ospfs_direntry_t *od;
-
+	
+	// Find Direntry of the file to delete
 	od = NULL; // silence compiler warning; entry_off indicates when !od
 	for (entry_off = 0; entry_off < dir_oi->oi_size;
 	     entry_off += OSPFS_DIRENTRY_SIZE) {
 		od = ospfs_inode_data(dir_oi, entry_off);
+		// Find Direntry by checking for valid Inode #, name len, & finally the name.
 		if (od->od_ino > 0
 		    && strlen(od->od_name) == dentry->d_name.len
 		    && memcmp(od->od_name, dentry->d_name.name, dentry->d_name.len) == 0)
 			break;
 	}
-
+	// Make sure direntry is valid
 	if (entry_off == dir_oi->oi_size) {
 		printk("<1>ospfs_unlink should not fail!\n");
 		return -ENOENT;
 	}
-
+	// Set inode number of the direntry to 0 so direntry can be used.
 	od->od_ino = 0;
+	// decrement link count of inode
 	oi->oi_nlink--;
+	
+	// If the inode link count is zero and it isn't a symbolic link, delete the file
+	if ( oi->oi_nlink == 0 && oi->oi_ftype != OSPFS_FTYPE_SYMLINK )
+		return change_size(oi, 0);
+	
 	return 0;
 }
 
