@@ -33,18 +33,17 @@ Tasks Completed:
 * add_block, remove_block, change_size
 * ospfs_write
 * ospfs_create
+* ospfs_link
+* ospfs_symlink, ospfs_unlink
 
 
 TODO:
-* ospfs_link
-* ospfs_symlink, ospfs_unlink
-* conditional symlinks
-* Add hard and soft link test cases to tester script
-* Remove all the debug print statements when finished testing
+* N/A
 
 
 Notes:
-* N/A
+* Test cases 18 and 19 were added to the lab-tester script to test hard and soft
+  links respectively.
 
 
 Known Issues:
