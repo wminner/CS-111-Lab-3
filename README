@@ -1,0 +1,35 @@
+Wesley Minner & Christie Mathews 
+  703549234       104404412
+
+CS 111 Operating Systems Principles
+Professor Eggert
+Winter 2016
+
+Spec:  http://www.read.cs.ucla.edu/111/lab3
+
+*******************
+Lab 3 - File System
+*******************
+
+Tasks Completed:
+* ospfs_read
+* ospfs_dir_readdir
+* allocate_block, free_block
+* add_block, remove_block, change_size
+* ospfs_write
+* ospfs_create
+* ospfs_link
+* ospfs_symlink, ospfs_unlink
+
+
+TODO:
+* N/A
+
+
+Notes:
+* Test cases 18 and 19 were added to the lab-tester script to test hard and soft
+  links respectively.
+
+
+Known Issues:
+* N/A
